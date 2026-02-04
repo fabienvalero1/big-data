@@ -1,5 +1,6 @@
--- Creation des tables pour Buy & Rent
+-- Schema pour le projet Big Data Buy & Rent
 
+-- Table de dimension: Localisation
 CREATE TABLE IF NOT EXISTS dim_location (
     code_insee VARCHAR(10) PRIMARY KEY,
     ville VARCHAR(255),
@@ -8,6 +9,7 @@ CREATE TABLE IF NOT EXISTS dim_location (
     zone_tendu BOOLEAN
 );
 
+-- Table de dimension: Propriétés
 CREATE TABLE IF NOT EXISTS dim_properties (
     property_id UUID PRIMARY KEY,
     type_bien VARCHAR(50),
@@ -17,6 +19,7 @@ CREATE TABLE IF NOT EXISTS dim_properties (
     annee_construction INT
 );
 
+-- Table de fait: Annonces enrichies
 CREATE TABLE IF NOT EXISTS fact_listings (
     listing_id UUID PRIMARY KEY,
     code_insee VARCHAR(10),
@@ -27,13 +30,10 @@ CREATE TABLE IF NOT EXISTS fact_listings (
     cashflow FLOAT,
     score_investissement FLOAT,
     date_creation TIMESTAMP,
-    -- Foreign keys could be enforced but meant for star schema logic
-    -- CONSTRAINT fk_location FOREIGN KEY (code_insee) REFERENCES dim_location(code_insee)
-    -- Simply simplified for the MVP to a flat fact table or minimal FKs
     metadata JSONB
 );
 
--- Table for market trends (aggregates)
+-- Table d'agrégats: Tendances marché
 CREATE TABLE IF NOT EXISTS agg_market_trends (
     ville VARCHAR(255),
     date_jour DATE,
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS agg_market_trends (
     PRIMARY KEY (ville, date_jour)
 );
 
--- Reference tables matching the "static" data sources
+-- Table de référence: Risques géographiques
 CREATE TABLE IF NOT EXISTS ref_georisques (
     code_insee VARCHAR(10) PRIMARY KEY,
     risque_inondation BOOLEAN DEFAULT FALSE,
@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS ref_georisques (
     risque_sismique INT DEFAULT 0
 );
 
+-- Table de référence: Taux financiers
 CREATE TABLE IF NOT EXISTS ref_taux (
     id SERIAL PRIMARY KEY,
     date_valeur DATE,
@@ -57,13 +58,22 @@ CREATE TABLE IF NOT EXISTS ref_taux (
     taux_usure FLOAT
 );
 
--- Insert some dummy data for dim_location if needed
+-- Données initiales
 INSERT INTO dim_location (code_insee, ville, code_postal, departement, zone_tendu) VALUES
 ('75056', 'Paris', '75001', '75', TRUE),
 ('69123', 'Lyon', '69000', '69', TRUE),
+('13055', 'Marseille', '13000', '13', TRUE),
+('33063', 'Bordeaux', '33000', '33', TRUE),
 ('42218', 'Saint-Étienne', '42000', '42', FALSE)
 ON CONFLICT DO NOTHING;
 
--- Insert default rates
 INSERT INTO ref_taux (date_valeur, taux_interet_moyen, taux_usure) VALUES
 (CURRENT_DATE, 3.5, 5.5);
+
+INSERT INTO ref_georisques (code_insee, risque_inondation, risque_industriel, risque_sismique) VALUES
+('75056', TRUE, FALSE, 1),
+('69123', TRUE, TRUE, 2),
+('13055', TRUE, TRUE, 3),
+('33063', TRUE, FALSE, 2),
+('42218', FALSE, TRUE, 2)
+ON CONFLICT DO NOTHING;

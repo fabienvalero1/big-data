@@ -1,52 +1,66 @@
 # Rapport de Projet Big Data : Buy & Rent
 
 ## 1. Problématique Métier
-Dans un marché immobilier tendu dynamique, la réactivité est la clé. Les investisseurs ont besoin d'identifier les opportunités rentables (cashflow positif, haute rentabilité) **en temps réel**, dès la publication des annonces.
 
-Les solutions traditionnelles (batch quotidien) sont trop lentes. Ce projet vise à mettre en place une plateforme Big Data capable de :
-- **Ingérer** des flux continus d'annonces.
-- **Enrichir** ces annonces instantanément avec des données contextuelles (Risques naturels, Taux d'emprunt).
-- **Calculer** des indicateurs de décision (Rentabilité, Cashflow).
-- **Stocker** les données pour analyse immédiate.
+Dans un marché immobilier dynamique, les investisseurs ont besoin d'identifier rapidement les opportunités rentables. Ce projet vise à construire une plateforme capable de :
+
+- **Collecter** des données hétérogènes (annonces, risques, taux)
+- **Transformer** ces données pour calculer des indicateurs clés
+- **Stocker** les résultats dans un modèle analytique
+- **Visualiser** les tendances via des dashboards
 
 ## 2. Architecture Globale
-Nous avons opté pour un **Architecture Kappa**, simplifiant la maintenance en traitant tout (batch et temps réel) via un moteur unique de streaming.
 
-**Composants Clés :**
-*   **Ingestion** : Scripts Python (Producers) simulant des API externes.
-*   **Data Lake** : **Apache Kafka** avec rétention des messages. Dans l'architecture Kappa, Kafka sert de source de vérité ("log-based data lake") car il stocke les événements bruts de façon persistante et rejouable.
-*   **Processing** : **Apache Spark Structured Streaming** pour le calcul distribué.
-*   **Serving** : **PostgreSQL** pour le stockage structuré et le requêtage SQL.
+Nous utilisons une architecture **ETL orchestrée par Airflow** :
+
+| Composant | Technologie | Rôle |
+|-----------|-------------|------|
+| Orchestration | Apache Airflow | Planification et exécution des pipelines |
+| Base de données | PostgreSQL | Stockage des données (Data Warehouse) |
+| Logs | Loki + Promtail | Collecte et agrégation des logs |
+| Visualisation | Grafana | Dashboards et monitoring |
+
+### Avantages de cette architecture :
+- **Reproductibilité** : Les DAGs Airflow définissent clairement le pipeline
+- **Observabilité** : Loki/Grafana permettent de monitorer l'exécution
+- **Scalabilité** : Chaque composant peut évoluer indépendamment
 
 ## 3. Pipeline de Données
-Le flux de données suit les étapes suivantes :
 
-1.  **Ingestion** :
-    *   `listings-producer` -> Topic `real-estate-raw` (Offres immobilières).
-    *   `georisks-ingester` -> Topic `ref-georisques` (Données inondation/sismique).
-    *   `financial-rates-producer` -> Table `ref_taux` (Taux Banque de France).
-2.  **Data Lake (Kafka)** :
-    *   Les topics Kafka stockent les données brutes de façon persistante (configurable via `retention.ms`).
-    *   Permet le "replay" des données pour retraitement.
-3.  **Traitement (Spark)** :
-    *   Lecture du stream Kafka `real-estate-raw`.
-    *   Jointure avec les référentiels (Risques, Taux).
-    *   Calcul du *Cashflow* et du *Score d'Investissement*.
-4.  **Stockage (PostgreSQL)** :
-    *   Insertion en base SQL (`fact_listings`) pour exploitation analytique.
+Le DAG `buy_and_rent_pipeline` s'exécute toutes les heures et comprend 5 tâches :
+
+```
+[Collect Listings] ──┐
+[Collect Georisks] ──┼──> [Enrich Listings] ──> [Load to PostgreSQL]
+[Collect Rates]    ──┘
+```
+
+### Détail des tâches :
+
+1. **collect_listings** : Génère des annonces immobilières (simulation)
+2. **collect_georisks** : Récupère les risques naturels par commune
+3. **collect_rates** : Récupère les taux d'intérêt actuels
+4. **enrich_listings** : Calcule rentabilité, cashflow, score
+5. **load_to_postgres** : Insère les données dans `fact_listings`
 
 ## 4. Modèle de Données (Star Schema)
-Pour faciliter l'analyse décisionnelle (BI), nous utilisons un modèle en étoile dans PostgreSQL :
 
-*   **Table de Fait** : `fact_listings` (Chaque ligne est une annonce enrichie avec prix, renta, cashflow).
-*   **Tables de Dimension** :
-    *   `dim_location` : Données géographiques (Ville, Zone tendue).
-    *   `dim_properties` : Caractéristiques du bien (Surface, DPE).
+| Table | Type | Description |
+|-------|------|-------------|
+| `fact_listings` | Fait | Annonces enrichies avec indicateurs |
+| `dim_location` | Dimension | Informations géographiques |
+| `ref_georisques` | Référence | Risques par commune |
+| `ref_taux` | Référence | Taux financiers |
 
 ## 5. Résultats et Conclusions
-La plateforme déployée permet :
-*   Une centralisation des données hétérogènes.
-*   Un calcul de rentabilité fiable prenant en compte les risques et les taux actuels.
-*   Une persistance robuste (Data Lake + Base de données).
 
-Cette architecture est scalable : l'ajout de nouveaux nœuds Spark ou Kafka permettrait de gérer des volumes massifs sans refonte du code.
+La plateforme permet :
+- ✅ Collecte automatisée de données hétérogènes
+- ✅ Calcul d'indicateurs d'investissement en temps quasi-réel
+- ✅ Stockage structuré pour analyse BI
+- ✅ Monitoring complet via Grafana
+
+### Évolutions possibles :
+- Intégration d'APIs réelles (SeLoger, LeBonCoin)
+- Ajout de modèles ML pour prédiction de prix
+- Alertes automatiques sur opportunités

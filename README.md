@@ -1,77 +1,113 @@
-# Architecture Big Data et Streaming - Projet Buy & Rent
+# Architecture Big Data - Projet Buy & Rent
 
-Ce projet est une refonte de l'application "Buy & Rent" en une architecture **Big Data & Streaming** utilisant l'architecture **Kappa**. Il permet l'analyse en temps réel d'annonces immobilières pour détecter les meilleures opportunités d'investissement.
+Ce projet implémente une plateforme Big Data pour l'analyse d'opportunités d'investissement immobilier.
 
 ## 🏗 Architecture
 
-L'architecture est entièrement conteneurisée via Docker et se compose de 4 couches principales :
+L'architecture utilise **Apache Airflow** pour l'orchestration des pipelines de données :
 
-1.  **Ingestion Layer (Python Producers)** :
-    *   `listings-producer` : Simule un flux d'annonces immobilières réaliste (via Faker) et les envoie dans Kafka (`real-estate-raw`).
-    *   `georisks-ingester` : Récupère (simule) les données de risques naturels (API Géorisques) et les envoie dans Kafka.
-    *   `financial-rates-producer` : Publie les taux d'intérêts actuels (Banque de France).
-
-2.  **Messaging Layer (Apache Kafka)** :
-    *   Sert de bus de données central et tampon persistant.
-    *   Topics : `real-estate-raw`, `ref-georisques`, `financial-rates`.
-
-3.  **Processing Layer (Apache Spark Structured Streaming)** :
-    *   Consomme les annonces depuis Kafka.
-    *   Enrichit les données avec les risques géographiques et les taux financiers.
-    *   Calcule les indicateurs financiers : Rentabilité Brute, Cashflow, Score d'investissement.
-
-4.  **Serving Layer (PostgreSQL)** :
-    *   Stocke les annonces enrichies et les agrégats de marché dans un schéma en étoile (Star Schema).
-    *   Tables : `fact_listings`, `dim_location`, `ref_taux`, etc.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        AIRFLOW (Orchestration)                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
+│  │   Collect    │  │   Collect    │  │   Collect    │           │
+│  │  Listings    │  │  Georisks    │  │    Rates     │           │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘           │
+│         │                 │                 │                    │
+│         └─────────────────┼─────────────────┘                    │
+│                           ▼                                      │
+│                   ┌──────────────┐                               │
+│                   │   Enrich &   │                               │
+│                   │  Transform   │                               │
+│                   └──────┬───────┘                               │
+│                          │                                       │
+│                          ▼                                       │
+│                   ┌──────────────┐                               │
+│                   │    Load to   │                               │
+│                   │  PostgreSQL  │                               │
+│                   └──────────────┘                               │
+└─────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     POSTGRESQL (Data Warehouse)                  │
+│  fact_listings │ dim_location │ ref_georisques │ ref_taux       │
+└─────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  MONITORING: Loki + Promtail (Logs) │ Grafana (Dashboards)      │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ## 🚀 Comment lancer le projet
 
 ### Pré-requis
-*   Docker Desktop installé et démarré.
+- Docker Desktop installé et démarré
 
 ### Lancement
 
-1.  **Démarrer l'infrastructure** :
-    ```bash
-    docker-compose up --build -d
-    ```
-    *Cette commande construit les images Python et télécharge les images Kafka, Spark, Postgres.*
+1. **Initialiser Airflow** (première fois uniquement) :
+   ```bash
+   docker-compose up airflow-init
+   ```
 
-2.  **Vérifier que tout tourne** :
-    ```bash
-    docker-compose ps
-    ```
-    Tous les conteneurs doivent être `Up`.
+2. **Démarrer tous les services** :
+   ```bash
+   docker-compose up -d
+   ```
 
-3.  **Soumettre le Job Spark** :
-    Le conteneur `spark-processor` est configuré pour lancer le job automatiquement. Vous pouvez suivre ses logs :
-    ```bash
-    docker logs -f spark-processor
-    ```
+3. **Accéder aux interfaces** :
+   - **Airflow** : http://localhost:8080 (user: `airflow`, password: `airflow`)
+   - **Grafana** : http://localhost:3000 (user: `admin`, password: `admin`)
+   - **PostgreSQL** : `localhost:5433` (user: `airflow`, password: `airflow`)
 
-4.  **Vérifier les données dans PostgreSQL** :
-    Connectez-vous à la base de données :
-    ```bash
-    docker exec -it postgres psql -U admin -d buyandrent
-    ```
-    Puis requêtez les données traitées :
-    ```sql
-    SELECT * FROM fact_listings ORDER BY date_creation DESC LIMIT 10;
-    ```
+4. **Déclencher le pipeline** :
+   - Allez dans Airflow → DAGs → `buy_and_rent_pipeline`
+   - Cliquez sur "Trigger DAG"
+
+5. **Vérifier les données** :
+   ```bash
+   docker exec -it $(docker ps -qf "name=postgres") psql -U airflow -d airflow -c "SELECT * FROM fact_listings LIMIT 5;"
+   ```
 
 ## 📂 Structure du projet
 
 ```
 .
-├── app/
-│   ├── producers/           # Scripts d'ingestion (Listings, Risques, Taux)
-│   └── processors/          # Job Spark Streaming
+├── airflow/
+│   ├── dags/                # DAGs Airflow
+│   ├── logs/                # Logs Airflow
+│   └── plugins/             # Plugins Airflow
+├── src/
+│   ├── data_collectors/     # Collecteurs de données
+│   ├── transformers/        # Transformations
+│   └── loaders/             # Chargement en base
 ├── sql/
 │   └── init.sql             # Schéma de base de données
-├── docker-compose.yml       # Orchestration
-├── Dockerfile.producers     # Image pour les scripts Python
-└── requirements.txt         # Dépendances Python
+├── monitoring/
+│   ├── promtail/            # Config Promtail
+│   └── grafana/             # Données Grafana
+├── docker-compose.yml       # Orchestration Docker
+├── .env                     # Variables d'environnement
+└── README.md
 ```
 
+## 📊 Pipeline de données
+
+1. **Collecte** (en parallèle) :
+   - Annonces immobilières (simulées via Faker)
+   - Risques géographiques (API Géorisques simulée)
+   - Taux financiers (Banque de France simulée)
+
+2. **Transformation** :
+   - Enrichissement avec les risques
+   - Calcul de la rentabilité brute
+   - Calcul du cashflow mensuel
+   - Score d'investissement
+
+3. **Chargement** :
+   - Insertion dans PostgreSQL (modèle en étoile)
+
 ## 📝 Auteurs
-*   Gael T (Étudiant Big Data)
+- Gael T (Étudiant Big Data)
