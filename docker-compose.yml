@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - big-data-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - big-data-net
+
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: buyandrent
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - big-data-net
+
+  spark-master:
+    image: apache/spark:3.5.0
+    container_name: spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    networks:
+      - big-data-net
+
+  spark-worker:
+    image: apache/spark:3.5.0
+    container_name: spark-worker
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_WORKER_MEMORY: 1G
+    networks:
+      - big-data-net
+
+  listings-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.producers
+    container_name: listings-producer
+    command: python app/producers/listings_producer.py
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: kafka:29092
+    networks:
+      - big-data-net
+  
+  georisks-ingester:
+    build:
+      context: .
+      dockerfile: Dockerfile.producers
+    container_name: georisks-ingester
+    command: python app/producers/georisks_ingester.py
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: kafka:29092
+    networks:
+      - big-data-net
+
+  financial-rates-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.producers
+    container_name: financial-rates-producer
+    command: python app/producers/financial_rates_producer.py
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: kafka:29092
+    networks:
+      - big-data-net
+
+  spark-processor:
+    image: apache/spark:3.5.0
+    container_name: spark-processor
+    depends_on:
+      - spark-master
+      - kafka
+      - postgres
+    volumes:
+      - ./app:/app
+      - spark_checkpoint:/tmp/checkpoints
+    environment:
+      KAFKA_BROKER: kafka:29092
+    user: root
+    command: >
+      /opt/spark/bin/spark-submit 
+      --master spark://spark-master:7077 
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.postgresql:postgresql:42.6.0
+      /app/processors/spark_processor.py
+    networks:
+      - big-data-net
+
+networks:
+  big-data-net:
+    driver: bridge
+
+volumes:
+  kafka_data:
+  postgres_data:
+  spark_checkpoint:

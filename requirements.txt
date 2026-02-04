@@ -1,0 +1,4 @@
+kafka-python
+faker
+requests
+psycopg2-binary
