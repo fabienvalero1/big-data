@@ -7,6 +7,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
     AIRFLOW__CORE__LOAD_EXAMPLES: ${AIRFLOW__CORE__LOAD_EXAMPLES}
+    AIRFLOW__WEBSERVER__SECRET_KEY: "this_is_a_very_secure_secret_key_fixed_for_dev_mode"
 
     # Libs Python pour le projet Big Data
     _PIP_ADDITIONAL_REQUIREMENTS: "requests beautifulsoup4 faker psycopg2-binary python-dotenv"
