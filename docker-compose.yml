@@ -1,5 +1,3 @@
-version: "3.8"
-
 x-airflow-common: &airflow-common
   image: ${AIRFLOW_IMAGE_NAME}
   environment:
@@ -7,10 +5,9 @@ x-airflow-common: &airflow-common
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
     AIRFLOW__CORE__LOAD_EXAMPLES: ${AIRFLOW__CORE__LOAD_EXAMPLES}
-    AIRFLOW__WEBSERVER__SECRET_KEY: "this_is_a_very_secure_secret_key_fixed_for_dev_mode"
 
     # Libs Python pour le projet Big Data
-    _PIP_ADDITIONAL_REQUIREMENTS: "requests beautifulsoup4 faker psycopg2-binary python-dotenv"
+    _PIP_ADDITIONAL_REQUIREMENTS: "requests beautifulsoup4 faker psycopg2-binary python-dotenv supabase"
 
     PYTHONPATH: /opt/airflow/src
 
@@ -97,13 +94,80 @@ services:
     depends_on:
       - loki
 
+  ########################
+  # KAFKA (KRaft mode)
+  ########################
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  ########################
+  # SPARK MASTER
+  ########################
+  spark-master:
+    image: apache/spark:4.0.1-python3
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.master.Master
+    ports:
+      - "7077:7077"
+      - "8081:8080"
+
+  ########################
+  # SPARK WORKER
+  ########################
+  spark-worker:
+    image: apache/spark:4.0.1-python3
+    depends_on:
+      - spark-master
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+
+  ########################
+  # MONGODB
+  ########################
+  mongodb:
+    image: mongo:6
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  ########################
+  # PROMETHEUS
+  ########################
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus
+
   # =========================
   # GRAFANA (Visualisation)
   # =========================
   grafana:
     image: grafana/grafana:10.2.3
     ports:
-      - "3001:3000"
+      - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -115,3 +179,4 @@ services:
 volumes:
   postgres_data:
   grafana_data:
+  mongodb_data:

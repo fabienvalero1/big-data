@@ -2,7 +2,7 @@
 
 Ce projet implémente une plateforme Big Data pour l'analyse d'opportunités d'investissement immobilier.
 
-## 🏗 Architecture
+## Architecture
 
 L'architecture utilise **Apache Airflow** pour l'orchestration des pipelines de données :
 
@@ -40,7 +40,7 @@ L'architecture utilise **Apache Airflow** pour l'orchestration des pipelines de 
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## 🚀 Comment lancer le projet
+## Comment lancer le projet
 
 ### Pré-requis
 - Docker Desktop installé et démarré
@@ -71,7 +71,7 @@ L'architecture utilise **Apache Airflow** pour l'orchestration des pipelines de 
    docker exec -it $(docker ps -qf "name=postgres") psql -U airflow -d airflow -c "SELECT * FROM fact_listings LIMIT 5;"
    ```
 
-## 📂 Structure du projet
+## Structure du projet
 
 ```
 .
@@ -93,7 +93,7 @@ L'architecture utilise **Apache Airflow** pour l'orchestration des pipelines de 
 └── README.md
 ```
 
-## 📊 Pipeline de données
+## Pipeline de données
 
 1. **Collecte** (en parallèle) :
    - Annonces immobilières (simulées via Faker)
@@ -109,5 +109,8 @@ L'architecture utilise **Apache Airflow** pour l'orchestration des pipelines de 
 3. **Chargement** :
    - Insertion dans PostgreSQL (modèle en étoile)
 
-## 📝 Auteurs
-- Gael T (Étudiant Big Data)
+## Auteurs
+- Gael Tuczapski
+- Fabien Valero
+- Emmanuel Lion
+

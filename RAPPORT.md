@@ -55,10 +55,10 @@ Le DAG `buy_and_rent_pipeline` s'exécute toutes les heures et comprend 5 tâche
 ## 5. Résultats et Conclusions
 
 La plateforme permet :
-- ✅ Collecte automatisée de données hétérogènes
-- ✅ Calcul d'indicateurs d'investissement en temps quasi-réel
-- ✅ Stockage structuré pour analyse BI
-- ✅ Monitoring complet via Grafana
+- Collecte automatisée de données hétérogènes
+- Calcul d'indicateurs d'investissement en temps quasi-réel
+- Stockage structuré pour analyse BI
+- Monitoring complet via Grafana
 
 ### Évolutions possibles :
 - Intégration d'APIs réelles (SeLoger, LeBonCoin)
