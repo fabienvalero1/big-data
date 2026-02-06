@@ -60,7 +60,7 @@ def enrich_with_spark(listings_json: str, georisks_json: str, rates_json: str, o
     spark = create_spark_session()
 
     try:
-        print("🚀 Démarrage du job Spark d'enrichissement...")
+        print("[START] Démarrage du job Spark d'enrichissement...")
 
         # Charge les données depuis les fichiers JSON
         listings_df = spark.read.schema(LISTINGS_SCHEMA).json(listings_json)
@@ -75,8 +75,8 @@ def enrich_with_spark(listings_json: str, georisks_json: str, rates_json: str, o
         months = 240  # 20 ans
         monthly_rate = interest_rate / 12.0 if interest_rate > 0 else 0.0
 
-        print(f"📊 Taux d'intérêt utilisé: {interest_rate * 100:.2f}%")
-        print(f"📊 Nombre d'annonces à traiter: {listings_df.count()}")
+        print(f"[INFO] Taux d'intérêt utilisé: {interest_rate * 100:.2f}%")
+        print(f"[INFO] Nombre d'annonces à traiter: {listings_df.count()}")
 
         # Jointure avec les risques géographiques
         enriched_df = listings_df.join(
@@ -146,7 +146,7 @@ def enrich_with_spark(listings_json: str, georisks_json: str, rates_json: str, o
         enriched_df = enriched_df.filter(col("price") > 0)
 
         # Affiche un aperçu
-        print("✅ Aperçu des données enrichies:")
+        print("[OK] Aperçu des données enrichies:")
         enriched_df.select(
             "id", "ville", "price", "loyer_estime",
             "cashflow", "rentabilite_brute", "score_investissement"
@@ -155,7 +155,7 @@ def enrich_with_spark(listings_json: str, georisks_json: str, rates_json: str, o
         # Sauvegarde en JSON
         enriched_df.coalesce(1).write.mode("overwrite").json(output_path)
 
-        print(f"✅ {enriched_df.count()} annonces enrichies sauvegardées dans {output_path}")
+        print(f"[OK] {enriched_df.count()} annonces enrichies sauvegardées dans {output_path}")
 
         return enriched_df.count()
 

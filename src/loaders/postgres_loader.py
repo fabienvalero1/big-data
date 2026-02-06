@@ -39,7 +39,7 @@ def load_to_postgres(**context):
     else:
         batch_ts = datetime.utcnow()
 
-    logger.info("💾 Début du chargement dans PostgreSQL pour le batch %s", batch_ts)
+    logger.info("Debut du chargement dans PostgreSQL pour le batch %s", batch_ts)
 
     # Essaie d'abord de récupérer depuis Spark (load_spark_results)
     listings = ti.xcom_pull(task_ids='load_spark_results', key='enriched_listings')
@@ -49,7 +49,7 @@ def load_to_postgres(**context):
         listings = ti.xcom_pull(task_ids='enrich_listings', key='enriched_listings')
 
     if not listings:
-        logger.warning("⚠️ Aucune donnée à charger dans PostgreSQL")
+        logger.warning("[WARNING] Aucune donnée à charger dans PostgreSQL")
         return 0
 
     # Convertit TOUTE la liste en types Python purs (élimine les Proxy Airflow)
@@ -96,7 +96,7 @@ def load_to_postgres(**context):
                     inserted += 1
             except Exception as e:
                 failed += 1
-                logger.exception("❌ Erreur insertion pour l'annonce %s: %s", listing.get('id'), e)
+                logger.exception("[ERROR] Erreur insertion pour l'annonce %s: %s", listing.get('id'), e)
 
         conn.commit()
 

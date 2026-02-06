@@ -109,7 +109,7 @@ def enrich_listings(**context):
     if not enriched_listings:
         raise ValueError("Aucune annonce enrichie, vérifier les données d'entrée")
 
-    logger.info("✅ %s annonces enrichies", len(enriched_listings))
+    logger.info("[OK] %s annonces enrichies", len(enriched_listings))
     if listings_without_risks > 0:
         logger.warning(
             "%s annonces sur %s n'ont pas de données de risques associées",

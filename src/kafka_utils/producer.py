@@ -133,7 +133,7 @@ def send_listings_to_kafka(listings: List[Dict[str, Any]], **context) -> int:
     producer = KafkaDataProducer()
     try:
         count = producer.send_batch(TOPIC_LISTINGS, listings, key_field='code_insee')
-        logger.info("✅ %s annonces envoyées vers Kafka topic '%s'", count, TOPIC_LISTINGS)
+        logger.info("[OK] %s annonces envoyées vers Kafka topic '%s'", count, TOPIC_LISTINGS)
 
         if ti:
             ti.xcom_push(key='kafka_listings_count', value=count)
@@ -164,7 +164,7 @@ def send_georisks_to_kafka(georisks: List[Dict[str, Any]] = None, **context) -> 
     producer = KafkaDataProducer()
     try:
         count = producer.send_batch(TOPIC_GEORISKS, georisks, key_field='code_insee')
-        logger.info("✅ %s risques envoyés vers Kafka topic '%s'", count, TOPIC_GEORISKS)
+        logger.info("[OK] %s risques envoyés vers Kafka topic '%s'", count, TOPIC_GEORISKS)
 
         if ti:
             ti.xcom_push(key='kafka_georisks_count', value=count)
@@ -195,7 +195,7 @@ def send_rates_to_kafka(rates: Dict[str, Any] = None, **context) -> int:
     producer = KafkaDataProducer()
     try:
         if producer.send(TOPIC_RATES, rates):
-            logger.info("✅ Taux envoyés vers Kafka topic '%s'", TOPIC_RATES)
+            logger.info("[OK] Taux envoyés vers Kafka topic '%s'", TOPIC_RATES)
 
             if ti:
                 ti.xcom_push(key='kafka_rates_sent', value=True)

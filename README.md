@@ -78,38 +78,71 @@ L'architecture utilise une approche **Lambda simplifiée** orchestrée par **Apa
 ### Pré-requis
 - Docker Desktop installé et démarré
 - Au moins 8 Go de RAM disponible
+- Git installé
 
 ### Lancement
 
-1. **Initialiser Airflow** (première fois uniquement) :
+1. **Cloner le projet** :
+   ```bash
+   git clone <url-du-repo>
+   cd big-data
+   ```
+
+2. **Configurer l'environnement** :
+   ```bash
+   # Copier le fichier d'exemple (si nécessaire)
+   cp .env.example .env
+   ```
+
+3. **Initialiser Airflow** (première fois uniquement) :
    ```bash
    docker-compose up airflow-init
    ```
 
-2. **Démarrer tous les services** :
+4. **Démarrer tous les services** :
    ```bash
    docker-compose up -d
    ```
 
-3. **Vérifier que tous les services sont démarrés** :
+5. **Vérifier que tous les services sont démarrés** :
    ```bash
    docker-compose ps
    ```
 
-4. **Accéder aux interfaces** :
-   - **Airflow** : http://localhost:8080 (user: `airflow`, password: `airflow`)
-   - **Spark Master** : http://localhost:8081
-   - **Grafana** : http://localhost:3000 (user: `admin`, password: `admin`)
-   - **PostgreSQL** : `localhost:5433` (user: `airflow`, password: `airflow`)
+   Attendez que tous les services soient en status "healthy" ou "Up".
 
-5. **Déclencher le pipeline** :
+6. **Accéder aux interfaces** :
+
+   | Service | URL | Identifiants |
+   |---------|-----|--------------|
+   | **Airflow** | http://localhost:8082 | airflow / airflow |
+   | **Spark Master** | http://localhost:8081 | - |
+   | **Grafana** | http://localhost:3000 | admin / admin |
+   | **PostgreSQL** | localhost:5433 | airflow / airflow |
+
+7. **Déclencher le pipeline** :
    - Allez dans Airflow → DAGs → `buy_and_rent_pipeline`
-   - Cliquez sur "Trigger DAG"
+   - Activez le DAG (toggle ON)
+   - Cliquez sur "Play" (▶) → "Trigger DAG"
 
-6. **Vérifier les données** :
+8. **Vérifier les données** :
    ```bash
-   docker exec -it $(docker ps -qf "name=postgres") psql -U airflow -d airflow -c "SELECT * FROM fact_listings LIMIT 5;"
+   # Linux/Mac
+   docker exec -it big-data-postgres-1 psql -U airflow -d airflow -c "SELECT COUNT(*) FROM fact_listings;"
+
+   # Windows PowerShell
+   docker exec -it big-data-postgres-1 psql -U airflow -d airflow -c "SELECT COUNT(*) FROM fact_listings;"
    ```
+
+### Arrêter le projet
+
+```bash
+# Arrêter tous les services
+docker-compose down
+
+# Arrêter et supprimer les volumes (reset complet)
+docker-compose down -v
+```
 
 ### Commandes utiles Kafka
 
@@ -137,6 +170,57 @@ docker exec -it big-data-spark-master-1 bash
 /opt/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark/jobs/transform_listings.py
 ```
 
+## Troubleshooting
+
+### Port 8080 déjà utilisé
+Si le port 8080 est déjà utilisé (ex: autre service), Airflow utilise le port **8082** par défaut dans ce projet.
+
+### Erreur "Invalid username or password" sur Airflow
+```bash
+# Recréer l'utilisateur admin
+docker-compose run airflow-webserver airflow users create \
+  --username airflow --password airflow \
+  --firstname Admin --lastname User \
+  --role Admin --email admin@example.com
+```
+
+### Erreur Spark "Mkdirs failed to create"
+C'est un problème de permissions. Les conteneurs Spark sont configurés avec `user: root` pour éviter ce problème. Si l'erreur persiste :
+```bash
+# Supprimer les anciens dossiers batch
+# Linux/Mac
+rm -rf data/batch_*
+
+# Windows PowerShell
+Remove-Item -Recurse -Force data\batch_*
+
+# Redémarrer les conteneurs
+docker-compose down
+docker-compose up -d
+```
+
+### Erreur "can't adapt type 'Proxy'" dans PostgreSQL
+Cette erreur est liée aux types Airflow XCom. Le code a été corrigé pour convertir automatiquement les Proxy en types Python natifs via JSON serialization.
+
+### Les données ne s'insèrent pas dans PostgreSQL
+Vérifiez les logs de la tâche `load_to_postgres` dans Airflow. Les erreurs courantes :
+- Proxy types (corrigé)
+- Connexion à la base (vérifier que postgres est healthy)
+
+### Grafana n'affiche pas de données
+1. Vérifiez que PostgreSQL contient des données :
+   ```bash
+   docker exec -it big-data-postgres-1 psql -U airflow -d airflow -c "SELECT COUNT(*) FROM fact_listings;"
+   ```
+2. Dans Grafana, ajustez la plage de temps (Time range) sur "Last 24 hours" ou "Today"
+3. Vérifiez que le datasource PostgreSQL est bien configuré
+
+### Recharger le code Python après modification
+Après avoir modifié un fichier Python dans `src/`, redémarrez Airflow :
+```bash
+docker-compose restart airflow-scheduler airflow-webserver
+```
+
 ## Structure du projet
 
 ```
@@ -148,10 +232,10 @@ docker exec -it big-data-spark-master-1 bash
 │   └── plugins/                 # Plugins Airflow
 ├── src/
 │   ├── data_collectors/         # Collecteurs de données
-│   │   ├── listings_collector.py
+│   │   ├── listings_collector.py   # Génère 100 annonces/batch
 │   │   ├── georisks_collector.py
 │   │   └── rates_collector.py
-│   ├── kafka/                   # Modules Kafka
+│   ├── kafka_utils/             # Modules Kafka (renommé pour éviter conflit)
 │   │   ├── producer.py          # Producteur Kafka
 │   │   └── consumer.py          # Consommateur Kafka
 │   ├── transformers/            # Transformations Python (fallback)
@@ -165,9 +249,14 @@ docker exec -it big-data-spark-master-1 bash
 ├── scripts/
 │   └── init_kafka_topics.sh     # Initialisation des topics Kafka
 ├── data/                        # Données partagées Airflow/Spark
+│   └── batch_*/                 # Dossiers de batch (générés automatiquement)
 ├── monitoring/
+│   ├── grafana/
+│   │   └── provisioning/        # Configuration Grafana automatique
+│   │       ├── datasources/     # Datasources (PostgreSQL, Loki)
+│   │       └── dashboards/      # Dashboards JSON
 │   ├── promtail/                # Config Promtail
-│   └── prometheus.yml/          # Config Prometheus
+│   └── prometheus.yml           # Config Prometheus
 ├── docker-compose.yml           # Orchestration Docker
 ├── .env                         # Variables d'environnement
 ├── README.md                    # Ce fichier
@@ -208,8 +297,73 @@ Le DAG `buy_and_rent_pipeline` comprend **9 tâches** organisées en 6 phases :
 | Rentabilité brute | Rendement annuel | `(loyer × 12 / prix) × 100` |
 | Score | Note d'investissement (0-10) | Basé sur cashflow et rentabilité |
 
+## Configuration Grafana
+
+### Datasources préconfigurés
+
+Les datasources sont automatiquement chargés au démarrage via le provisioning :
+
+- **PostgreSQL** : Connexion au Data Warehouse (`postgres:5432`)
+- **Loki** : Agrégation des logs (`loki:3100`)
+
+### Requêtes SQL utiles pour Grafana
+
+```sql
+-- Évolution du nombre d'annonces par heure
+SELECT
+  date_trunc('hour', date_creation) as time,
+  COUNT(*) as "Nb annonces"
+FROM fact_listings
+GROUP BY 1 ORDER BY 1
+
+-- Distribution par ville
+SELECT
+  CASE code_insee
+    WHEN '75056' THEN 'Paris'
+    WHEN '69123' THEN 'Lyon'
+    WHEN '13055' THEN 'Marseille'
+    WHEN '33063' THEN 'Bordeaux'
+    WHEN '42218' THEN 'Saint-Étienne'
+    ELSE code_insee
+  END as "Ville",
+  COUNT(*) as "Nb annonces",
+  AVG(prix_acquisition) as "Prix moyen"
+FROM fact_listings
+GROUP BY code_insee
+
+-- Évolution des indicateurs financiers
+SELECT
+  date_creation as time,
+  AVG(cashflow) as "Cashflow moyen",
+  AVG(rentabilite_brute) as "Rentabilité moyenne",
+  AVG(score_investissement) as "Score moyen"
+FROM fact_listings
+GROUP BY date_creation
+ORDER BY date_creation
+
+-- Top 10 meilleures opportunités
+SELECT
+  listing_id,
+  prix_acquisition as "Prix",
+  loyer_estime as "Loyer",
+  cashflow as "Cashflow",
+  score_investissement as "Score"
+FROM fact_listings
+ORDER BY score_investissement DESC
+LIMIT 10
+```
+
+### Exporter/Importer un dashboard
+
+Pour sauvegarder un dashboard et le versionner :
+
+1. Dans Grafana, ouvrez votre dashboard
+2. Cliquez sur ⚙️ Settings → JSON Model
+3. Copiez le JSON dans `monitoring/grafana/provisioning/dashboards/mon-dashboard.json`
+4. Redémarrez Grafana : `docker-compose restart grafana`
+
 ## Auteurs
 
-- Gael Tuczapski
-- Fabien Valero
-- Emmanuel Lion
+- Gaël TUCZAPSKI
+- Fabien VALERO
+- Emmanuel LION

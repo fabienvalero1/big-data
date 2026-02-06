@@ -173,7 +173,7 @@ def consume_and_save(output_dir: str, **context) -> Dict[str, str]:
                 for listing in listings:
                     f.write(json.dumps(listing) + '\n')
             output_files['listings'] = listings_path
-            logger.info("✅ %s annonces sauvegardées: %s", len(listings), listings_path)
+            logger.info("[OK] %s annonces sauvegardées: %s", len(listings), listings_path)
 
         # Sauvegarde les risques
         georisks = messages.get(TOPIC_GEORISKS, [])
@@ -183,7 +183,7 @@ def consume_and_save(output_dir: str, **context) -> Dict[str, str]:
                 for risk in georisks:
                     f.write(json.dumps(risk) + '\n')
             output_files['georisks'] = georisks_path
-            logger.info("✅ %s risques sauvegardés: %s", len(georisks), georisks_path)
+            logger.info("[OK] %s risques sauvegardés: %s", len(georisks), georisks_path)
 
         # Sauvegarde les taux (dernier message)
         rates_list = messages.get(TOPIC_RATES, [])
@@ -193,7 +193,7 @@ def consume_and_save(output_dir: str, **context) -> Dict[str, str]:
             with open(rates_path, 'w') as f:
                 json.dump(rates, f)
             output_files['rates'] = rates_path
-            logger.info("✅ Taux sauvegardés: %s", rates_path)
+            logger.info("[OK] Taux sauvegardés: %s", rates_path)
 
         # Stocke les chemins dans XCom
         if ti:

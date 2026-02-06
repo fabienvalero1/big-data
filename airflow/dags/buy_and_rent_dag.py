@@ -82,7 +82,7 @@ def prepare_spark_data(**context):
     # Garde aussi le chemin Airflow pour load_spark_results
     ti.xcom_push(key='airflow_batch_dir', value=batch_dir)
 
-    print(f"✅ Données préparées pour Spark dans: {batch_dir}")
+    print(f"[OK] Données préparées pour Spark dans: {batch_dir}")
     print(f"   - Annonces: {len(listings)}")
     print(f"   - Risques: {len(georisks)}")
     print(f"   - Taux: {rates}")
@@ -120,7 +120,7 @@ def load_spark_results(**context):
                     except json.JSONDecodeError:
                         continue
 
-    print(f"✅ {len(enriched_listings)} annonces enrichies chargées depuis Spark")
+    print(f"[OK] {len(enriched_listings)} annonces enrichies chargées depuis Spark")
 
     # Stocke dans XCom pour le loader PostgreSQL
     ti.xcom_push(key='enriched_listings', value=enriched_listings)
