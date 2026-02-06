@@ -6,8 +6,8 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
     AIRFLOW__CORE__LOAD_EXAMPLES: ${AIRFLOW__CORE__LOAD_EXAMPLES}
 
-    # Libs Python pour le projet Big Data
-    _PIP_ADDITIONAL_REQUIREMENTS: "requests beautifulsoup4 faker psycopg2-binary python-dotenv supabase"
+    # Libs Python pour le projet Big Data (ajout kafka-python)
+    _PIP_ADDITIONAL_REQUIREMENTS: "requests beautifulsoup4 faker psycopg2-binary python-dotenv supabase kafka-python"
 
     PYTHONPATH: /opt/airflow/src
 
@@ -16,17 +16,24 @@ x-airflow-common: &airflow-common
     DB_USER: ${POSTGRES_USER}
     DB_PASSWORD: ${POSTGRES_PASSWORD}
 
+    # Configuration Kafka
+    KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
     - ./airflow/plugins:/opt/airflow/plugins
     - ./src:/opt/airflow/src
+    - ./data:/opt/airflow/data
+    - /var/run/docker.sock:/var/run/docker.sock
 
   user: "${AIRFLOW_UID}:0"
 
   depends_on:
     postgres:
       condition: service_healthy
+    kafka:
+      condition: service_started
 
 services:
 
@@ -62,7 +69,7 @@ services:
     <<: *airflow-common
     command: webserver
     ports:
-      - "8080:8080"
+      - "8082:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 10s
@@ -117,29 +124,54 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
+      # Auto-création des topics
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   ########################
   # SPARK MASTER
   ########################
   spark-master:
     image: apache/spark:4.0.1-python3
+    user: root
     command: >
       /opt/spark/bin/spark-class
       org.apache.spark.deploy.master.Master
     ports:
       - "7077:7077"
       - "8081:8080"
+    volumes:
+      - ./spark_jobs:/opt/spark/jobs
+      - ./data:/opt/spark/data
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_HOST=spark-master
 
   ########################
   # SPARK WORKER
   ########################
   spark-worker:
     image: apache/spark:4.0.1-python3
+    user: root
     depends_on:
       - spark-master
     command: >
       /opt/spark/bin/spark-class
       org.apache.spark.deploy.worker.Worker
       spark://spark-master:7077
+    volumes:
+      - ./spark_jobs:/opt/spark/jobs
+      - ./data:/opt/spark/data
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
 
   ########################
   # MONGODB
@@ -173,8 +205,10 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
     depends_on:
       - loki
+      - postgres
 
 volumes:
   postgres_data:

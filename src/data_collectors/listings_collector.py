@@ -71,7 +71,7 @@ def collect_listings(**context):
     logger.info("Début de la collecte des annonces pour le batch %s", batch_date)
 
     # Génère un batch brut d'annonces
-    raw_listings = [generate_listing(batch_date=batch_date) for _ in range(10)]
+    raw_listings = [generate_listing(batch_date=batch_date) for _ in range(100)]
     total = len(raw_listings)
 
     # Filtrage des annonces aberrantes

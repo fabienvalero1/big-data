@@ -1,7 +1,9 @@
 """
 Loader PostgreSQL
 Charge les données enrichies dans la base de données
+Compatible avec les sorties Python et Spark
 """
+import json
 import logging
 import os
 from datetime import datetime
@@ -24,20 +26,34 @@ def get_db_connection():
 def load_to_postgres(**context):
     """
     Charge les annonces enrichies dans PostgreSQL.
+    Compatible avec les données issues de:
+    - enrichment.py (traitement Python)
+    - transform_listings.py (traitement Spark)
     Compare le volume en entrée et le volume effectivement inséré.
     """
     ti = context['ti']
     execution_date = context.get("execution_date")
-    batch_ts = execution_date or datetime.utcnow()
+    # Convertit en datetime Python pur (évite le Proxy Airflow)
+    if execution_date:
+        batch_ts = datetime.fromisoformat(str(execution_date).replace('+00:00', ''))
+    else:
+        batch_ts = datetime.utcnow()
 
     logger.info("💾 Début du chargement dans PostgreSQL pour le batch %s", batch_ts)
 
-    # Récupère les données enrichies
-    listings = ti.xcom_pull(task_ids='enrich_listings', key='enriched_listings')
+    # Essaie d'abord de récupérer depuis Spark (load_spark_results)
+    listings = ti.xcom_pull(task_ids='load_spark_results', key='enriched_listings')
+
+    # Fallback sur le traitement Python classique
+    if not listings:
+        listings = ti.xcom_pull(task_ids='enrich_listings', key='enriched_listings')
 
     if not listings:
         logger.warning("⚠️ Aucune donnée à charger dans PostgreSQL")
         return 0
+
+    # Convertit TOUTE la liste en types Python purs (élimine les Proxy Airflow)
+    listings = json.loads(json.dumps(list(listings), default=str))
 
     total_in = len(listings)
     logger.info("Nombre d'annonces en entrée pour chargement: %s", total_in)
